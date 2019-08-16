@@ -1,0 +1,91 @@
+type BlockId
+type Block = struct {
+    parent: BlockId,
+    height: uint,
+    justify: BlockId,
+}
+
+function Hash(Block): BlockId
+const blocks: [BlockId]Block 
+axiom forall id: BlockId. Hash(blocks[id]) == id
+
+const h: uint // number of honest replicas
+const f: uint // number of faulty replicas
+axiom h > 2f + 1
+const root: BlockId // root of block tree
+axiom blocks[root].height == 0
+axiom forall id: BlockId. id == root || blocks[id].height == blocks[blocks[id].parent].height + 1
+
+type HonestReplicaId = 1..h // ids of honest replicas
+
+//// global model variables
+
+// all collected votes 
+// initial value: lambda id: BlockId. if id == root then n+f else f (maximum equivocation)
+var voteStore: [BlockId]uint
+
+// id of the latest globally-committed block 
+// initial value: root  
+var committed: BlockId
+
+//// per-replica state
+
+// monotonically increasing height of the last voted block 
+// initial value: 0
+var vheight: uint
+
+// id of the locked block
+// initial value: root
+var lockedBlockId: BlockId
+
+// id of the latest locally-committed block 
+// initial value: root
+var locallyCommitted: BlockId
+
+//// start things off
+procedure main() {
+    var r: HonestReplicaId
+    var newBlockId: BlockId
+
+    async OnReceiveProposal(r, newBlockId)
+}
+
+//// top-level event handler at a replica to update vheight and "send" vote
+procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId) {
+    var newBlock: Block
+
+    newBlock := blocks[newBlockId]
+    if * && voteStore[newBlock.justify] >= h {
+        if newBlock.height > vheight[r] && 
+           (extends(newBlockId, lockedBlockId[r]) || 
+            blocks[newBlock.justify].height > blocks[lockedBlockId[r]].height) {
+            vheight[r] := newBlock.height
+            voteStore[newBlockId] := voteStore[newBlockId] + 1;
+        }
+        async Update(r, newBlock.justify)
+    }
+    async Main()
+}
+
+//// internal event handler at a replica to update lockedBlockId, locallyCommitted, and committed
+//// and assert consensus safety
+procedure Update(r: HonestReplicaId, id'': BlockId) {
+    var id', id: BlockId
+    var b'', b', b: Block
+
+    b'' := blocks[id'']
+    id' := b''.justify
+    b'  := blocks[id']
+    id  := b'.justify
+    b   := blocks[id]
+    if b'.height > blocks[lockedBlockId[r]].height {
+        lockedBlockId[r] := id'
+    }
+    if b''.parent == b' && b'.parent == b {
+        assert consistent(b, locallyCommitted[r])
+        locallyCommitted[r] := max(b, locallyCommitted[r])
+
+        assert consistent(b, committed)
+        committed := max(b, committed)
+    }
+}
