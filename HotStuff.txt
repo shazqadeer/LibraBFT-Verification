@@ -21,7 +21,7 @@ type HonestReplicaId = 1..h // ids of honest replicas
 //// global model variables
 
 // all collected votes 
-// initial value: lambda id: BlockId. if id == root then n+f else f (maximum equivocation)
+// initial value: lambda id: BlockId. if id == root then h+f else f (maximum equivocation)
 var voteStore: [BlockId]uint
 
 // id of the latest globally-committed block 
@@ -48,6 +48,9 @@ procedure main() {
     var newBlockId: BlockId
 
     async OnReceiveProposal(r, newBlockId)
+    if * {
+        async Main()
+    }
 }
 
 //// top-level event handler at a replica to update vheight and "send" vote
@@ -64,7 +67,6 @@ procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId) {
         }
         async Update(r, newBlock.justify)
     }
-    async Main()
 }
 
 //// internal event handler at a replica to update lockedBlockId, locallyCommitted, and committed
