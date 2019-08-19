@@ -84,10 +84,8 @@ procedure Update(r: HonestReplicaId, id'': BlockId) {
         lockedBlockId[r] := id'
     }
     if b''.parent == id' && b'.parent == id {
-        assert consistent(id, locallyCommitted[r])
-        locallyCommitted[r] := max(id, locallyCommitted[r])
-
         assert consistent(id, committed)
+        locallyCommitted[r] := max(id, locallyCommitted[r])
         committed := max(id, committed)
     }
 }
