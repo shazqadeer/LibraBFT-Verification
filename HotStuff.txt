@@ -73,7 +73,10 @@ procedure Main() {
 }
 
 //// top-level event handler at a replica to update vheight and "send" vote
-procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId) {
+procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
+reads  voteStore, vheight, lockedBlockId
+writes voteStore, vheight
+{
     var newBlock: Block
 
     newBlock := blocks[newBlockId]
@@ -94,7 +97,10 @@ procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId) {
 
 //// internal event handler at a replica to update lockedBlockId, locallyCommitted, and committed
 //// and assert consensus safety
-procedure Update(r: HonestReplicaId, id'': BlockId) {
+procedure Update(r: HonestReplicaId, id'': BlockId)
+reads  lockedBlockId, locallyCommitted, committed
+writes lockedBlockId, locallyCommitted, committed
+{
     var id', id: BlockId
     var b'', b', b: Block
 
