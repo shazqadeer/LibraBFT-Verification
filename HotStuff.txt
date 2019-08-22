@@ -47,18 +47,18 @@ var locallyCommitted: BlockId
 // otherwise, empty set 
 function Between(id', id) : [BlockId]bool
 
-function Reachable(id', id): bool {
+function Reaches(id', id): bool {
     Between(id', id) != {}
 }
 
 function extends(newProposalId: BlockId, lockedBlockId: BlockId) : bool {
-    Reachable(newProposalId, lockedBlockId) && 
+    Reaches(newProposalId, lockedBlockId) && 
     (forall id in Between(newProposalId, lockedBlockId). 
         id == lockedBlockId || blocks[id].height == blocks[blocks[id].parent].height + 1)
 }
 
 function consistent(id': BlockId, id: BlockId) : bool {
-    Reachable(id', id) || Reachable(id, id')
+    Reaches(id', id) || Reaches(id, id')
 }
 
 //// start things off
@@ -105,7 +105,7 @@ procedure Update(r: HonestReplicaId, id'': BlockId) {
     }
     if b''.parent == id' && b'.parent == id {
         assert consistent(id, committed)
-        if Reachable(id, committed) {
+        if Reaches(id, committed) {
             locallyCommitted[r] := id
             committed := id
         }
