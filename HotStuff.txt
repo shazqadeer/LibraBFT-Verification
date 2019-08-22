@@ -12,8 +12,9 @@ axiom forall id: BlockId. Hash(blocks[id]) == id
 const h: uint // number of honest replicas
 const f: uint // number of faulty replicas
 axiom h > 2f + 1
+
 const root: BlockId // root of block tree
-axiom blocks[root].height == 0
+axiom blocks[root].height == 0 && blocks[root].parent == root && blocks[root].justify == root
 axiom forall id: BlockId. blocks[id].height == 0 || blocks[id].height == blocks[blocks[id].parent].height + 1
 
 type HonestReplicaId = 1..h // ids of honest replicas
@@ -58,15 +59,16 @@ procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId) {
     var newBlock: Block
 
     newBlock := blocks[newBlockId]
-    if * && voteStore[newBlock.justify] >= h {
-        if newBlock.height > vheight[r] && 
-           (extends(newBlockId, lockedBlockId[r]) || 
-            blocks[newBlock.justify].height > blocks[lockedBlockId[r]].height) {
-            vheight[r] := newBlock.height
-            voteStore[newBlockId] := voteStore[newBlockId] + 1;
-        }
-        async Update(r, newBlock.justify)
+    if * || voteStore[newBlock.justify] < h {
+        return
     }
+    if newBlock.height > vheight[r] &&
+            (extends(newBlockId, lockedBlockId[r]) ||
+             blocks[newBlock.justify].height > blocks[lockedBlockId[r]].height) {
+        vheight[r] := newBlock.height
+        voteStore[newBlockId] := voteStore[newBlockId] + 1
+    }
+    async Update(r, newBlock.justify)
 }
 
 //// internal event handler at a replica to update lockedBlockId, locallyCommitted, and committed
