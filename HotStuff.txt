@@ -43,26 +43,26 @@ var lockedBlockId: BlockId
 var locallyCommitted: BlockId
 
 // primitive function that evaluates as follows: 
-// if id' can reach id by following parent link 0 or more times, then set of all nodes along the path (id and id' inclusive)
+// if id' can reach id by following parent link 0 or more times, then set of all nodes along the path (id' and id inclusive)
 // otherwise, empty set 
-function Between(id', id) : [BlockId]bool
+function Between(id': BlockId, id: BlockId) : [BlockId]bool
 
-function Reaches(id', id): bool {
+function Reaches(id': BlockId, id: BlockId): bool {
     Between(id', id) != {}
 }
 
-function extends(newProposalId: BlockId, lockedBlockId: BlockId) : bool {
+function Extends(newProposalId: BlockId, lockedBlockId: BlockId) : bool {
     Reaches(newProposalId, lockedBlockId) && 
     (forall id in Between(newProposalId, lockedBlockId). 
         id == lockedBlockId || blocks[id].height == blocks[blocks[id].parent].height + 1)
 }
 
-function consistent(id': BlockId, id: BlockId) : bool {
+function Consistent(id': BlockId, id: BlockId) : bool {
     Reaches(id', id) || Reaches(id, id')
 }
 
 //// start things off
-procedure main() {
+procedure Main() {
     var r: HonestReplicaId
     var newBlockId: BlockId
 
@@ -77,11 +77,14 @@ procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId) {
     var newBlock: Block
 
     newBlock := blocks[newBlockId]
-    if * || voteStore[newBlock.justify] < h {
+    if voteStore[newBlock.justify] < h {
+        return
+    }
+    if * { // models dynamic equivocation
         return
     }
     if newBlock.height > vheight[r] &&
-            (extends(newBlockId, lockedBlockId[r]) ||
+            (Extends(newBlockId, lockedBlockId[r]) ||
              blocks[newBlock.justify].height > blocks[lockedBlockId[r]].height) {
         vheight[r] := newBlock.height
         voteStore[newBlockId] := voteStore[newBlockId] + 1
@@ -104,9 +107,13 @@ procedure Update(r: HonestReplicaId, id'': BlockId) {
         lockedBlockId[r] := id'
     }
     if b''.parent == id' && b'.parent == id {
-        assert consistent(id, committed)
-        if Reaches(id, committed) {
+        // assert (forall x: HonestReplicaId. Reaches(committed, locallyCommitted[x]))
+        // the fact stated above is preserved by the following code
+        assert Consistent(id, committed)
+        if Reaches(id, locallyCommitted[r]) {
             locallyCommitted[r] := id
+        }
+        if Reaches(id, committed) {
             committed := id
         }
     }
