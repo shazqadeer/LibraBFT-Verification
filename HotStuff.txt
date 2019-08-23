@@ -92,11 +92,11 @@ writes voteStore, vheight
         vheight[r] := newBlock.height
         voteStore[newBlockId] := voteStore[newBlockId] + 1
     }
-    async Update(r, newBlock.justify)
+    Update(r, newBlock.justify)
 }
 
-//// internal event handler at a replica to update lockedBlockId, locallyCommitted, and committed
-//// and assert consensus safety
+//// Updates lockedBlockId and makes the async call to potentially commit
+//// the 3-chain head
 procedure Update(r: HonestReplicaId, id'': BlockId)
 reads  lockedBlockId, locallyCommitted, committed
 writes lockedBlockId, locallyCommitted, committed
@@ -113,14 +113,20 @@ writes lockedBlockId, locallyCommitted, committed
         lockedBlockId[r] := id'
     }
     if b''.parent == id' && b'.parent == id {
-        // assert (forall x: HonestReplicaId. Reaches(committed, locallyCommitted[x]))
-        // the fact stated above is preserved by the following code
-        assert Consistent(id, committed)
-        if Reaches(id, locallyCommitted[r]) {
-            locallyCommitted[r] := id
-        }
-        if Reaches(id, committed) {
-            committed := id
-        }
+        async Commit(id)
+    }
+}
+
+//// internal event handler at a replica to update locallyCommitted, and committed
+//// and assert consensus safety
+procedure Commit(id: BlockId) {
+    // the fact stated below is preserved by the body of Commit
+    // (forall x: HonestReplicaId. Reaches(committed, locallyCommitted[x]))
+    assert Consistent(id, committed)
+    if Reaches(id, locallyCommitted[r]) {
+        locallyCommitted[r] := id
+    }
+    if Reaches(id, committed) {
+        committed := id
     }
 }
