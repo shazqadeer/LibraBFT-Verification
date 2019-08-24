@@ -72,12 +72,11 @@ reads  voteStore, vround, lockedBlockRound
 writes voteStore, vround, lockedBlockRound
 {
     var newBlock: Block
+    var numEquivocators: uint;
 
+    assume numEquivocators <= f;
     newBlock := blocks[newBlockId]
-    if card(voteStore[newBlock.justify]) + f < h { // maximum equivocation
-        return
-    }
-    if * { // dynamic equivocation
+    if card(voteStore[newBlock.justify]) + numEquivocators < h {
         return
     }
     if newBlock.round > vround[r] &&
