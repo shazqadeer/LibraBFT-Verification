@@ -88,8 +88,7 @@ writes voteStore, vround, lockedBlockRound
     Update(r, newBlock.justify)
 }
 
-//// updates lockedBlockRound and makes the async call to potentially commit
-//// the 3-chain head
+//// update lockedBlockRound and make the async call to commit the 3-chain head
 procedure Update(r: HonestReplicaId, id'': BlockId)
 reads  lockedBlockRound
 writes lockedBlockRound
@@ -106,13 +105,13 @@ writes lockedBlockRound
         lockedBlockRound[r] := b'.round
     }
     if b''.round == b'.round + 1 && b'.round == b.round + 1 {
-        async Commit(id)
+        async Commit(r, id)
     }
 }
 
-//// internal event handler at a replica to update locallyCommitted, and committed
+//// internal event handler at a replica to update locallyCommitted and committed
 //// and assert consensus safety
-procedure Commit(id: BlockId) 
+procedure Commit(r: HonestReplicaId, id: BlockId) 
 reads  locallyCommitted, committed
 writes locallyCommitted, committed
 {

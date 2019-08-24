@@ -95,8 +95,7 @@ writes voteStore, vheight, lockedBlockId
     Update(r, newBlock.justify)
 }
 
-//// updates lockedBlockId and makes the async call to potentially commit
-//// the 3-chain head
+//// update lockedBlockId and make the async call to commit the 3-chain head
 procedure Update(r: HonestReplicaId, id'': BlockId)
 reads  lockedBlockId
 writes lockedBlockId
@@ -113,13 +112,13 @@ writes lockedBlockId
         lockedBlockId[r] := id'
     }
     if b''.parent == id' && b'.parent == id {
-        async Commit(id)
+        async Commit(r, id)
     }
 }
 
-//// internal event handler at a replica to update locallyCommitted, and committed
+//// internal event handler at a replica to update locallyCommitted and committed
 //// and assert consensus safety
-procedure Commit(id: BlockId) 
+procedure Commit(r: HonestReplicaId, id: BlockId) 
 reads  locallyCommitted, committed
 writes locallyCommitted, committed
 {
