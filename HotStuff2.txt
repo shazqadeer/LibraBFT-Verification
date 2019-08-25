@@ -1,0 +1,136 @@
+type BlockId
+type Block = struct {
+    parent: BlockId,
+    height: uint,
+    justify: BlockId,
+}
+
+function Hash(Block): BlockId
+const blocks: [BlockId]Block 
+axiom forall id: BlockId. Hash(blocks[id]) == id
+
+const h: uint // number of honest replicas
+const f: uint // number of faulty replicas
+axiom h > 2f
+
+const root: BlockId // root of block tree
+axiom blocks[root].height == 0 && blocks[root].parent == root && blocks[root].justify == root
+
+type HonestReplicaId = 1..h // ids of honest replicas
+
+//// global model variables
+
+// all collected votes sent by honest replicas
+// initial value: lambda id: BlockId. r: HonestReplicaId. id = root
+var voteStore: [BlockId][HonestReplicaId]bool
+
+// id of the latest globally-committed block 
+// initial value: root  
+var committed: BlockId
+
+//// per-replica state
+
+// monotonically increasing height of the last voted block 
+// initial value: 0
+var vheight: uint
+
+// id of the locked block
+// initial value: root
+var lockedBlockId: BlockId
+
+// id of the latest locally-committed block 
+// initial value: root
+var locallyCommitted: BlockId
+
+// primitive function that evaluates as follows: 
+// if id' can reach id by following parent link 0 or more times, then set of all nodes along the path (id' and id inclusive)
+// otherwise, empty set 
+function Between(id': BlockId, id: BlockId) : [BlockId]bool
+
+function Reaches(id': BlockId, id: BlockId): bool {
+    Between(id', id) != {}
+}
+
+function Extends(id': BlockId, id: BlockId) : bool {
+    id' != id &&
+    Reaches(id', id) && 
+    (forall x in Between(id', id). x == id || blocks[x].height == blocks[blocks[x].parent].height + 1)
+}
+
+function Consistent(id': BlockId, id: BlockId) : bool {
+    Reaches(id', id) || Reaches(id, id')
+}
+
+procedure HasQuorum(blockId: BlockId) : bool {
+    var numEquivocators: uint
+    assume numEquivocators <= f
+
+    card(voteStore[blockId]) + numEquivocators >= h
+}
+
+//// start things off
+procedure Main() {
+    var r: HonestReplicaId
+    var blockId: BlockId
+
+    if * {
+        async OnReceiveProposal(r, blockId)
+    } else {
+        async TryCommit(r, blockId)
+    }
+    if * {
+        async Main()
+    }
+}
+
+//// top-level event handler at a replica to update vheight and "send" vote
+procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
+reads  voteStore, vheight, lockedBlockId, committed
+writes voteStore, vheight, lockedBlockId, committed
+{
+    var newBlock, b'': Block
+    var id': BlockId
+
+    newBlock := blocks[newBlockId]
+    if !HasQuorum(newBlock.justify) {
+        return
+    }
+    if !Extends(newBlockId, newBlock.justify) {
+        return
+    }
+
+    b'' := blocks[newBlock.justify]
+    if newBlock.height > vheight[r] && b''.height >= blocks[lockedBlockId[r]].height {
+        vheight[r] := newBlock.height
+        voteStore[newBlockId][r] := true
+    }
+
+    id' := b''.justify
+    if blocks[id'].height > blocks[lockedBlockId[r]].height {
+        lockedBlockId[r] := id'
+
+        if HasQuorum(newBlockId) {
+            assert Reaches(id', committed)
+            committed := id'
+        }
+    } 
+}
+
+//// event handler at a replica to assert consensus safety
+procedure TryCommit(r: HonestReplicaId, id'': BlockId)
+reads  committed
+{
+    var id', id: BlockId
+    var b'', b': Block
+
+    if !HasQuorum(id'') {
+        return
+    }
+    b'' := blocks[id'']
+    id' := b''.justify
+    b'  := blocks[id']
+    id  := b'.justify
+    if b''.parent == id' && b'.parent == id {
+        assert Consistent(committed, id)
+    }
+}
