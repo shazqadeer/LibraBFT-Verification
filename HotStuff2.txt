@@ -38,10 +38,6 @@ var vheight: uint
 // initial value: root
 var lockedBlockId: BlockId
 
-// id of the latest locally-committed block 
-// initial value: root
-var locallyCommitted: BlockId
-
 // primitive function that evaluates as follows: 
 // if id' can reach id by following parent link 0 or more times, then set of all nodes along the path (id' and id inclusive)
 // otherwise, empty set 
@@ -83,7 +79,7 @@ procedure Main() {
     }
 }
 
-//// top-level event handler at a replica to update vheight and "send" vote
+//// event handler at a replica to process a proposal
 procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
 reads  voteStore, vheight, lockedBlockId, committed
 writes voteStore, vheight, lockedBlockId, committed
