@@ -11,7 +11,7 @@ axiom forall id: BlockId. Hash(blocks[id]) == id
 
 const h: uint // number of honest replicas
 const f: uint // number of faulty replicas
-axiom h > 2f + 1
+axiom h > 2f
 
 const root: BlockId // root of block tree
 axiom blocks[root].height == 0 && blocks[root].parent == root && blocks[root].justify == root
@@ -20,9 +20,9 @@ type HonestReplicaId = 1..h // ids of honest replicas
 
 //// global model variables
 
-// all collected votes 
-// initial value: lambda id: BlockId. if id == root then h+f else f (maximum equivocation)
-var voteStore: [BlockId]uint
+// all collected votes sent by honest replicas
+// initial value: lambda id: BlockId. {}
+var voteStore: [BlockId][HonestReplicaId]bool
 
 // id of the latest globally-committed block 
 // initial value: root  
@@ -75,31 +75,29 @@ procedure Main() {
 //// top-level event handler at a replica to update vheight and "send" vote
 procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
 reads  voteStore, vheight, lockedBlockId
-writes voteStore, vheight
+writes voteStore, vheight, lockedBlockId
 {
     var newBlock: Block
+    var numEquivocators: uint;
 
+    assume numEquivocators <= f;
     newBlock := blocks[newBlockId]
-    if voteStore[newBlock.justify] < h {
-        return
-    }
-    if * { // models dynamic equivocation
+    if card(voteStore[newBlock.justify]) + numEquivocators < h {
         return
     }
     if newBlock.height > vheight[r] &&
             (Extends(newBlockId, lockedBlockId[r]) ||
              blocks[newBlock.justify].height > blocks[lockedBlockId[r]].height) {
         vheight[r] := newBlock.height
-        voteStore[newBlockId] := voteStore[newBlockId] + 1
+        voteStore[newBlockId][r] := true
     }
     Update(r, newBlock.justify)
 }
 
-//// Updates lockedBlockId and makes the async call to potentially commit
-//// the 3-chain head
+//// update lockedBlockId and make the async call to commit the 3-chain head
 procedure Update(r: HonestReplicaId, id'': BlockId)
-reads  lockedBlockId, locallyCommitted, committed
-writes lockedBlockId, locallyCommitted, committed
+reads  lockedBlockId
+writes lockedBlockId
 {
     var id', id: BlockId
     var b'', b', b: Block
@@ -113,11 +111,16 @@ writes lockedBlockId, locallyCommitted, committed
         lockedBlockId[r] := id'
     }
     if b''.parent == id' && b'.parent == id {
-        async Commit(id)
+        async Commit(r, id)
     }
 }
 
-procedure Commit(id: BlockId) {
+//// internal event handler at a replica to update locallyCommitted and committed
+//// and assert consensus safety
+procedure Commit(r: HonestReplicaId, id: BlockId) 
+reads  locallyCommitted, committed
+writes locallyCommitted, committed
+{
     // the fact stated below is preserved by the body of Commit
     // (forall x: HonestReplicaId. Reaches(committed, locallyCommitted[x]))
     assert Consistent(id, committed)
