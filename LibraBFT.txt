@@ -2,7 +2,6 @@ type BlockId
 type Block = struct {
     parent: BlockId,
     round: uint,
-    justify: BlockId,
 }
 
 function Hash(Block): BlockId
@@ -14,7 +13,7 @@ const f: uint // number of faulty replicas
 axiom h >= 2f + 1
 
 const root: BlockId // root of block tree
-axiom blocks[root].height == 0 && blocks[root].parent == root && blocks[root].justify == root
+axiom blocks[root].height == 0 && blocks[root].parent == root
 
 type HonestReplicaId = 1..h // ids of honest replicas
 type Round
@@ -82,7 +81,7 @@ writes voteStore, vheight
     var newBlock: Block
 
     newBlock := blocks[newBlockId]
-    if voteStore[newBlock.justify] < h {
+    if voteStore[newBlock.parent] < h {
         return
     }
     if * { // models dynamic equivocation
@@ -93,7 +92,7 @@ writes voteStore, vheight
         vround[r] := newBlock.round
         voteStore[newBlockId] := voteStore[newBlockId] + 1
     }
-    Update(r, newBlock.justify)
+    Update(r, newBlock.parent)
 }
 
 //// Updates lockedBlockRound and makes the async call to potentially commit
@@ -106,9 +105,9 @@ writes lockedBlockId, locallyCommitted, committed
     var b'', b', b: Block
 
     b'' := blocks[id'']
-    id' := b''.justify
+    id' := b''.parent
     b'  := blocks[id']
-    id  := b'.justify
+    id  := b'.parent
     b   := blocks[id]
     if b'.round > lockedBlockRound[r] {
         lockedBlockRound[r] := b'.round

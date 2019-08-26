@@ -117,8 +117,6 @@ writes lockedBlockId, locallyCommitted, committed
     }
 }
 
-//// internal event handler at a replica to update locallyCommitted, and committed
-//// and assert consensus safety
 procedure Commit(id: BlockId) {
     // the fact stated below is preserved by the body of Commit
     // (forall x: HonestReplicaId. Reaches(committed, locallyCommitted[x]))
