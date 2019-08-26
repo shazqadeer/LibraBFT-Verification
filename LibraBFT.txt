@@ -75,14 +75,7 @@ writes voteStore, vround, lockedBlockRound
 
     assume numEquivocators <= f;
     newBlock := blocks[newBlockId]
-<<<<<<< HEAD
-    if voteStore[newBlock.parent] < h {
-        return
-    }
-    if * { // models dynamic equivocation
-=======
-    if card(voteStore[newBlock.justify]) + numEquivocators < h {
->>>>>>> ec79bab6ddcda8ae9938eb022c969194e04c5a2d
+    if card(voteStore[newBlock.parent]) + numEquivocators < h {
         return
     }
     if newBlock.round > vround[r] &&
