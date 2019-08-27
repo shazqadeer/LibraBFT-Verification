@@ -16,26 +16,7 @@ const root: BlockId // root of block tree
 axiom blocks[root].round == 0 && blocks[root].parent == root
 
 type HonestReplicaId = 1..h // ids of honest replicas
-
-//// global model variables
-
-// // all collected votes sent by honest replicas
-// initial value: lambda id: BlockId. r: HonestReplicaId. id = root
-var voteStore: [BlockId][HonestReplicaId]bool
-
-// id of the latest globally-committed block 
-// initial value: root  
-var committed: BlockId
-
-//// per-replica state
-
-// monotonically increasing round of the last voted block 
-// initial value: 0
-var vround: uint
-
-// id of the locked block
-// initial value: 0
-var lockedBlockRound: uint
+type HonestQuorum = {q: Set<HonestReplicaId> | size(q) >= h - f} // all possible quorums of honest nodes
 
 // primitive function that returns true iff id' can reach id by following parent link 0 or more times
 function Reaches(id': BlockId, id: BlockId): bool;
@@ -44,13 +25,40 @@ function Consistent(id': BlockId, id: BlockId) : bool {
     Reaches(id', id) || Reaches(id, id')
 }
 
+//// global model variables
+
+// all collected votes sent by honest replicas
+var voteStore: [BlockId]Set<HonestReplicaId>
+
+// id of the latest globally-committed block
+var committed: BlockId
+
+//// per-replica variables
+
+// monotonically increasing round of the last voted block
+var lastVoteRound: uint
+
+// id of the locked block
+var lockedBlockRound: uint
+
+//// procedures
+
 procedure HasQuorum(blockId: BlockId) : bool 
 reads voteStore
 {
     var numEquivocators: uint
 
+    // numEquivocators is the number of faulty replicas who voted for blockId
     assume numEquivocators <= f
     size(voteStore[blockId]) + numEquivocators >= h
+}
+
+procedure Initialize()
+{
+    voteStore := (lambda id: BlockId. if id = root then HonestReplicaId else {})
+    committed := root
+    lastVoteRound := (lambda r: HonestReplicaId. 0)
+    lockedBlockRound := (lambda r: HonestReplicaId. 0)
 }
 
 //// start things off
@@ -58,20 +66,23 @@ procedure Main() {
     var r: HonestReplicaId
     var blockId: BlockId
 
+    // propose or commit nondeterministically
     if * {
         async OnReceiveProposal(r, blockId)
     } else {
         async TryCommit(r, blockId)
     }
+
+    // keep going nondeterministically
     if * {
         async Main()
     }
 }
 
-//// event handler at a replica to "send" vote and update vround and lockedBlockRound
+//// event handler at a replica to "send" vote and update lastVoteRound and lockedBlockRound
 procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
-reads  voteStore, vround, lockedBlockRound
-writes voteStore, vround, lockedBlockRound
+reads  voteStore, lastVoteRound, lockedBlockRound
+writes voteStore, lastVoteRound, lockedBlockRound
 {
     var newBlock, b'', b': Block
     var id'': BlockId
@@ -81,11 +92,15 @@ writes voteStore, vround, lockedBlockRound
     if !HasQuorum(id'') {
         return
     }
+    
+    // possibly vote
     b'' := blocks[id'']
-    if newBlock.round > vround[r] && b''.round > lockedBlockRound[r] {
-        vround[r] := newBlock.round
-        voteStore[newBlockId][r] := true
+    if newBlock.round > lastVoteRound[r] && b''.round >= lockedBlockRound[r] {
+        lastVoteRound[r] := newBlock.round
+        voteStore[newBlockId] := voteStore[newBlockId] + r
     }
+
+    // possibly update locked block
     b'  := blocks[b''.parent]
     if b'.round > lockedBlockRound[r] {
         lockedBlockRound[r] := b'.round
@@ -98,16 +113,17 @@ reads  voteStore, committed
 writes committed
 {
     var id', id: BlockId
-    var b'', b': Block
+    var b'', b', b: Block
 
     if !HasQuorum(id'') {
         return
     }
     b'' := blocks[id'']
-    id' := b''.justify
+    id' := b''.parent
     b'  := blocks[id']
-    id  := b'.justify
-    // Invariant: (exists q: Quorum. (forall x in q. lockedBlockRound[x] >= b.round))
+    id  := b'.parent
+    b := blocks[id]
+    // Invariant: (exists q: HonestQuorum. (forall x: HonestReplicaId. x in q ==> lockedBlockRound[x] >= b.round))
     if b''.round == b'.round + 1 && b'.round == b.round + 1 {
         assert Consistent(id, committed)
         if Reaches(id, committed) {
