@@ -107,9 +107,8 @@ writes committed
     id' := b''.justify
     b'  := blocks[id']
     id  := b'.justify
+    // Invariant: (exists q: Quorum. (forall x in q. lockedBlockRound[x] >= b.round))
     if b''.round == b'.round + 1 && b'.round == b.round + 1 {
-        // Invariant:
-        // (forall x: HonestReplicaId. lockedBlockRound[x] >= b.round)
         assert Consistent(id, committed)
         if Reaches(id, committed) {
             committed := id
