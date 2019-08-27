@@ -57,7 +57,9 @@ function Consistent(id': BlockId, id: BlockId) : bool {
     Reaches(id', id) || Reaches(id, id')
 }
 
-procedure HasQuorum(blockId: BlockId) : bool {
+procedure HasQuorum(blockId: BlockId) : bool 
+reads voteStore
+{
     var numEquivocators: uint
     assume numEquivocators <= f
 
@@ -81,8 +83,8 @@ procedure Main() {
 
 //// event handler at a replica to process a proposal
 procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
-reads  voteStore, vheight, lockedBlockId, committed
-writes voteStore, vheight, lockedBlockId, committed
+reads  voteStore, vheight, lockedBlockId
+writes voteStore, vheight, lockedBlockId
 {
     var newBlock, b'': Block
     var id': BlockId
@@ -104,17 +106,13 @@ writes voteStore, vheight, lockedBlockId, committed
     id' := b''.justify
     if blocks[id'].height > blocks[lockedBlockId[r]].height {
         lockedBlockId[r] := id'
-
-        if HasQuorum(newBlockId) {
-            assert Reaches(id', committed)
-            committed := id'
-        }
     } 
 }
 
 //// event handler at a replica to assert consensus safety
 procedure TryCommit(r: HonestReplicaId, id'': BlockId)
-reads  committed
+reads  voteStore, committed
+writes committed
 {
     var id', id: BlockId
     var b'', b': Block
@@ -127,6 +125,9 @@ reads  committed
     b'  := blocks[id']
     id  := b'.justify
     if b''.parent == id' && b'.parent == id {
-        assert Consistent(committed, id)
+        assert Consistent(id, committed)
+        if Reaches(id, committed) {
+            committed := id
+        }
     }
 }

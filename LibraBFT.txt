@@ -13,14 +13,14 @@ const f: uint // number of faulty replicas
 axiom h > 2f
 
 const root: BlockId // root of block tree
-axiom blocks[root].height == 0 && blocks[root].parent == root
+axiom blocks[root].round == 0 && blocks[root].parent == root
 
 type HonestReplicaId = 1..h // ids of honest replicas
 
 //// global model variables
 
 // // all collected votes sent by honest replicas
-// initial value: lambda id: BlockId. {}
+// initial value: lambda id: BlockId. r: HonestReplicaId. id = root
 var voteStore: [BlockId][HonestReplicaId]bool
 
 // id of the latest globally-committed block 
@@ -37,10 +37,6 @@ var vround: uint
 // initial value: 0
 var lockedBlockRound: uint
 
-// id of the latest locally-committed block 
-// initial value: root
-var locallyCommitted: BlockId
-
 // primitive function that evaluates as follows: 
 // if id' can reach id by following parent link 0 or more times, then set of all nodes along the path (id' and id inclusive)
 // otherwise, empty set 
@@ -54,12 +50,25 @@ function Consistent(id': BlockId, id: BlockId) : bool {
     Reaches(id', id) || Reaches(id, id')
 }
 
+procedure HasQuorum(blockId: BlockId) : bool 
+reads voteStore
+{
+    var numEquivocators: uint
+    assume numEquivocators <= f
+
+    card(voteStore[blockId]) + numEquivocators >= h
+}
+
 //// start things off
 procedure Main() {
     var r: HonestReplicaId
-    var newBlockId: BlockId
+    var blockId: BlockId
 
-    async OnReceiveProposal(r, newBlockId)
+    if * {
+        async OnReceiveProposal(r, blockId)
+    } else {
+        async TryCommit(r, blockId)
+    }
     if * {
         async Main()
     }
@@ -71,56 +80,45 @@ reads  voteStore, vround, lockedBlockRound
 writes voteStore, vround, lockedBlockRound
 {
     var newBlock: Block
-    var numEquivocators: uint;
+    var id': BlockId
+    var b'', b': Block
 
-    assume numEquivocators <= f;
     newBlock := blocks[newBlockId]
-    if card(voteStore[newBlock.parent]) + numEquivocators < h {
+    id'' := newBlock.parent
+    if !HasQuorum(id'') {
         return
     }
-    if newBlock.round > vround[r] &&
-             blocks[newBlock.parent].round > lockedBlockRound[r] {
+    b'' := blocks[id'']
+    if newBlock.round > vround[r] && b''.round > lockedBlockRound[r] {
         vround[r] := newBlock.round
         voteStore[newBlockId][r] := true
     }
-    Update(r, newBlock.parent)
-}
-
-//// update lockedBlockRound and make the async call to commit the 3-chain head
-procedure Update(r: HonestReplicaId, id'': BlockId)
-reads  lockedBlockRound
-writes lockedBlockRound
-{
-    var id', id: BlockId
-    var b'', b', b: Block
-
-    b'' := blocks[id'']
     id' := b''.parent
     b'  := blocks[id']
-    id  := b'.parent
-    b   := blocks[id]
     if b'.round > lockedBlockRound[r] {
         lockedBlockRound[r] := b'.round
     }
-    if b''.round == b'.round + 1 && b'.round == b.round + 1 {
-        async Commit(r, id)
-    }
 }
 
-//// internal event handler at a replica to update locallyCommitted and committed
-//// and assert consensus safety
-procedure Commit(r: HonestReplicaId, id: BlockId) 
-reads  locallyCommitted, committed
-writes locallyCommitted, committed
+//// event handler at a replica to update committed and assert consensus safety
+procedure TryCommit(r: HonestReplicaId, id'': BlockId)
+reads  voteStore, committed
+writes committed
 {
-    // the fact stated below is preserved by the body of Commit
-    // (forall x: HonestReplicaId. Reaches(committed, locallyCommitted[x]))
-    assert Consistent(id, committed)
-    if Reaches(id, locallyCommitted[r]) {
-        locallyCommitted[r] := id
-    }
-    if Reaches(id, committed) {
-        committed := id
-     }
- }
+    var id', id: BlockId
+    var b'', b': Block
 
+    if !HasQuorum(id'') {
+        return
+    }
+    b'' := blocks[id'']
+    id' := b''.justify
+    b'  := blocks[id']
+    id  := b'.justify
+    if b''.round == b'.round + 1 && b'.round == b.round + 1 {
+        assert Consistent(id, committed)
+        if Reaches(id, committed) {
+            committed := id
+        }
+    }
+}
