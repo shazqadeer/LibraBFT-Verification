@@ -38,7 +38,7 @@ var committed: BlockId
 // monotonically increasing round of the last voted block
 var lastVoteRound: uint
 
-// id of the locked block
+// monotonically increasing round of the locked block
 var lockedBlockRound: uint
 
 //// procedures
