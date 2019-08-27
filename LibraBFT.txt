@@ -33,7 +33,7 @@ var committed: BlockId
 // initial value: 0
 var vround: uint
 
-// id of the locked block
+// Round of the locked block
 // initial value: 0
 var lockedBlockRound: uint
 
