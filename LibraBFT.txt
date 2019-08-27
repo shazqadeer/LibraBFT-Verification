@@ -37,14 +37,8 @@ var vround: uint
 // initial value: 0
 var lockedBlockRound: uint
 
-// primitive function that evaluates as follows: 
-// if id' can reach id by following parent link 0 or more times, then set of all nodes along the path (id' and id inclusive)
-// otherwise, empty set 
-function Between(id': BlockId, id: BlockId) : [BlockId]bool
-
-function Reaches(id': BlockId, id: BlockId): bool {
-    Between(id', id) != {}
-}
+// primitive function that returns true iff id' can reach id by following parent link 0 or more times
+function Reaches(id': BlockId, id: BlockId): bool;
 
 function Consistent(id': BlockId, id: BlockId) : bool {
     Reaches(id', id) || Reaches(id, id')
@@ -54,9 +48,9 @@ procedure HasQuorum(blockId: BlockId) : bool
 reads voteStore
 {
     var numEquivocators: uint
-    assume numEquivocators <= f
 
-    card(voteStore[blockId]) + numEquivocators >= h
+    assume numEquivocators <= f
+    size(voteStore[blockId]) + numEquivocators >= h
 }
 
 //// start things off
@@ -74,14 +68,13 @@ procedure Main() {
     }
 }
 
-//// top-level event handler at a replica to update vround and "send" vote
+//// event handler at a replica to "send" vote and update vround and lockedBlockRound
 procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
 reads  voteStore, vround, lockedBlockRound
 writes voteStore, vround, lockedBlockRound
 {
-    var newBlock: Block
-    var id': BlockId
-    var b'', b': Block
+    var newBlock, b'', b': Block
+    var id'': BlockId
 
     newBlock := blocks[newBlockId]
     id'' := newBlock.parent
@@ -93,8 +86,7 @@ writes voteStore, vround, lockedBlockRound
         vround[r] := newBlock.round
         voteStore[newBlockId][r] := true
     }
-    id' := b''.parent
-    b'  := blocks[id']
+    b'  := blocks[b''.parent]
     if b'.round > lockedBlockRound[r] {
         lockedBlockRound[r] := b'.round
     }
