@@ -29,6 +29,8 @@ function Consistent(id': BlockId, id: BlockId) : bool {
 
 // all collected votes sent by honest replicas
 var voteStore: [BlockId]Set<HonestReplicaId>
+
+// all blocks on which quorum has been established
 var qcStore: Set<BlockId>
 
 // id of the latest globally-committed block
