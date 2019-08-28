@@ -1,0 +1,148 @@
+type BlockId
+type Block = struct {
+    parent: BlockId,
+    round: uint,
+}
+
+function Hash(Block): BlockId
+const blocks: [BlockId]Block 
+axiom forall id: BlockId. Hash(blocks[id]) == id
+
+const h: uint // number of honest replicas
+const f: uint // number of faulty replicas
+axiom h > 2f
+
+const root: BlockId // root of block tree
+axiom blocks[root].round == 0 && blocks[root].parent == root
+
+type HonestReplicaId = 1..h // ids of honest replicas
+type HonestQuorum = {q: Set<HonestReplicaId> | size(q) >= h - f} // all possible quorums of honest nodes
+
+// primitive function that returns true iff id' can reach id by following parent link 0 or more times
+function Reaches(id': BlockId, id: BlockId): bool;
+
+function Consistent(id': BlockId, id: BlockId) : bool {
+    Reaches(id', id) || Reaches(id, id')
+}
+
+//// global model variables
+
+// all collected votes sent by honest replicas
+var voteStore: [BlockId]Set<HonestReplicaId>
+var qcStore: Set<BlockId>
+
+// id of the latest globally-committed block
+var committed: BlockId
+
+//// per-replica variables
+
+// monotonically increasing round of the last voted block
+var lastVoteRound: uint
+
+// monotonically increasing round of the locked block
+var lockedBlockRound: uint
+
+//// procedures
+
+procedure HasQuorum(blockId: BlockId) : bool 
+reads voteStore
+{
+    var numEquivocators: uint
+
+    // numEquivocators is the number of faulty replicas who voted for blockId
+    assume numEquivocators <= f
+    size(voteStore[blockId]) + numEquivocators >= h
+}
+
+procedure Initialize()
+{
+    voteStore := (lambda id: BlockId. if id = root then HonestReplicaId else {})
+    qcStore := { root }
+    committed := root
+    lastVoteRound := (lambda r: HonestReplicaId. 0)
+    lockedBlockRound := (lambda r: HonestReplicaId. 0)
+}
+
+//// start things off
+procedure Main() {
+    var r: HonestReplicaId
+    var blockId: BlockId
+
+    // propose or commit nondeterministically
+    if * {
+        async OnReceiveProposal(r, blockId)
+    } else if * {
+        async TryAddQuorumCertificate(r, blockId)
+    } else {
+        async TryCommit(r, blockId)
+    }
+
+    // keep going nondeterministically
+    if * {
+        async Main()
+    }
+}
+
+//// event handler at a replica to "send" vote and update lastVoteRound and lockedBlockRound
+procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
+reads  voteStore, lastVoteRound, lockedBlockRound
+writes voteStore, lastVoteRound, lockedBlockRound
+{
+    var newBlock, b'', b': Block
+    var id'': BlockId
+
+    newBlock := blocks[newBlockId]
+    id'' := newBlock.parent
+    if !(id'' in qcStore) {
+        return
+    }
+    
+    // possibly vote
+    b'' := blocks[id'']
+    if newBlock.round > lastVoteRound[r] && b''.round >= lockedBlockRound[r] {
+        lastVoteRound[r] := newBlock.round
+        voteStore[newBlockId] := voteStore[newBlockId] + r
+    }
+}
+
+procedure TryAddQuorumCertificate(r: HonestReplicaId, id'': BlockId)
+{
+    var b'', b': Block
+
+    if !HasQuorum(id'') {
+        return
+    }
+    qcStore := qcStore + id''
+
+    // possibly update locked block
+    b'' := blocks[id'']
+    b'  := blocks[b''.parent]
+    if b'.round > lockedBlockRound[r] {
+        lockedBlockRound[r] := b'.round
+    }
+}
+
+//// event handler at a replica to update committed and assert consensus safety
+procedure TryCommit(r: HonestReplicaId, id'': BlockId)
+reads  voteStore, committed
+writes committed
+{
+    var id', id: BlockId
+    var b'', b', b: Block
+
+    if !(id'' in qcStore) {
+        return
+    }
+    b'' := blocks[id'']
+    id' := b''.parent
+    b'  := blocks[id']
+    id  := b'.parent
+    b := blocks[id]
+    // Invariant: (exists q: HonestQuorum. (forall x: HonestReplicaId. x in q ==> lockedBlockRound[x] >= b.round))
+    if b''.round == b'.round + 1 && b'.round == b.round + 1 {
+        assert Consistent(id, committed)
+        if Reaches(id, committed) {
+            committed := id
+        }
+    }
+}
