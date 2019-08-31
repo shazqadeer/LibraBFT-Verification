@@ -44,9 +44,6 @@ var lastVoteRound: uint
 // monotonically increasing round of the locked block
 var lockedBlockRound: uint
 
-// id of the latest locally-committed block
-var locallyCommitted: BlockId
-
 //// procedures
 
 procedure Initialize()
@@ -56,7 +53,6 @@ procedure Initialize()
     qcStore := (lambda r: HonestQuorum. { root })
     lastVoteRound := (lambda r: HonestReplicaId. 0)
     lockedBlockRound := (lambda r: HonestReplicaId. 0)
-    locallyCommitted := (lambda r: HonestReplicaId. root)
 }
 
 //// start things off
@@ -138,8 +134,8 @@ writes qcStore, lockedBlockRound
 
 //// event handler at a replica to commit a block and assert consensus safety
 procedure OnCommit(r: HonestReplicaId, id'': BlockId)
-reads  qcStore, globallyCommitted, locallyCommitted
-writes globallyCommitted, locallyCommitted
+reads  qcStore, globallyCommitted
+writes globallyCommitted
 {
     var id', id: BlockId
     var b'', b', b: Block
@@ -153,10 +149,6 @@ writes globallyCommitted, locallyCommitted
     id  := b'.parent
     b := blocks[id]
     if b''.round == b'.round + 1 && b'.round == b.round + 1 {
-        assert Consistent(id, locallyCommitted[r])
-        if Reaches(id, locallyCommitted[r]) {
-            locallyCommitted[r] := id
-        }
         assert Consistent(id, globallyCommitted)
         if Reaches(id, globallyCommitted) {
             globallyCommitted := id
