@@ -79,7 +79,7 @@ procedure Main() {
 
 //// event handler at a replica to "send" vote and update lastVoteRound
 procedure OnProposal(r: HonestReplicaId, newBlockId: BlockId)
-reads  voteStore, lastVoteRound
+reads  qcStore, voteStore, lastVoteRound
 writes voteStore, lastVoteRound
 {
     var newBlock, b'': Block
@@ -100,7 +100,7 @@ writes voteStore, lastVoteRound
 }
 
 procedure TryAddQuorumCertificate(blockId: BlockId) : bool 
-reads voteStore
+reads  qcStore, voteStore
 writes qcStore
 {
     var numEquivocators: uint
@@ -115,7 +115,7 @@ writes qcStore
 
 //// event handler at a replica to add a quorum certificate and update lockedBlockRound
 procedure OnQuorumCertificate(r: HonestReplicaId, id'': BlockId)
-reads voteStore
+reads  qcStore, voteStore, lockedBlockRound
 writes qcStore, lockedBlockRound
 {
     var b'', b': Block
