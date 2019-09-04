@@ -93,17 +93,17 @@ writes voteStore, lastVoteRound, lockedBlockRound
         return
     }
     
+    // possibly update locked block
+    b'  := blocks[b''.parent]
+    if b'.round > lockedBlockRound[r] {
+        lockedBlockRound[r] := b'.round
+    }
+    
     // possibly vote
     b'' := blocks[id'']
     if newBlock.round > lastVoteRound[r] && b''.round >= lockedBlockRound[r] {
         lastVoteRound[r] := newBlock.round
         voteStore[newBlockId] := voteStore[newBlockId] + r
-    }
-
-    // possibly update locked block
-    b'  := blocks[b''.parent]
-    if b'.round > lockedBlockRound[r] {
-        lockedBlockRound[r] := b'.round
     }
 }
 
