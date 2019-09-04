@@ -36,13 +36,13 @@ var globallyCommitted: BlockId
 //// per-replica variables
 
 // all blocks on which quorum has been established
-var qcStore: Set<BlockId>
+var qcStore: [HonestReplicaId]Set<BlockId>
 
 // monotonically increasing round of the last voted block
-var lastVoteRound: uint
+var lastVoteRound: [HonestReplicaId]uint
 
 // monotonically increasing round of the preferred block
-var preferredBlockRound: uint
+var preferredBlockRound: [HonestReplicaId]uint
 
 //// procedures
 
@@ -50,7 +50,7 @@ procedure Initialize()
 {
     voteStore := (lambda id: BlockId. if id = root then HonestReplicaId else {})
     globallyCommitted := root
-    qcStore := (lambda r: HonestQuorum. { root })
+    qcStore := (lambda r: HonestReplicaId. { root })
     lastVoteRound := (lambda r: HonestReplicaId. 0)
     preferredBlockRound := (lambda r: HonestReplicaId. 0)
 }
@@ -82,12 +82,15 @@ procedure TryAddQuorumCertificate(blockId: BlockId) : bool
 reads  qcStore, voteStore, preferredBlockRound
 writes qcStore, preferredBlockRound
 {
+    var numHonestVoters: uint
     var numEquivocators: uint
     var b'', b': Block
 
+    // numHonestVoters is the number of honest votes seen by this replica
+    assume numHonestVoters <= size(voteStore[blockId])
     // numEquivocators is the number of faulty replicas who voted for blockId
     assume numEquivocators <= f
-    if size(voteStore[blockId]) + numEquivocators >= h {
+    if numHonestVoters + numEquivocators >= h {
         qcStore[r] := qcStore[r] + blockId
     }
 
@@ -176,19 +179,19 @@ function ContiguousTwoChain(id: BlockId, id': BlockId, id'': BlockId) : bool
     blocks[id'].round + 1 == blocks[id''].round
 }
 
-forall r in HonestReplicaId. id, id' in qcStore[r]. 
+forall r in HonestReplicaId. forall id, id' in qcStore[r]. 
     OneChain(id, id') ==> (id' == root || blocks[id].round < blocks[id'].round)
 
-forall r in HonestReplicaId. id, id' in qcStore[r]. 
+forall r in HonestReplicaId. forall id, id' in qcStore[r]. 
     blocks[id].round == blocks[id'].round ==> id == id'
 
-forall r in HonestReplicaId. id, id', id'' in qcStore[r].
+forall r in HonestReplicaId. forall id, id', id'' in qcStore[r].
     TwoChain(id, id', id'') ==>
         (exists q: HonestQuorum. (forall x: HonestReplicaId. x in q ==> preferredBlockRound[x] >= blocks[id].round))
 
-forall r in HonestReplicaId. id, id', id'' in qcStore[r].
+forall r in HonestReplicaId. forall id, id', id'' in qcStore[r].
     ContiguousTwoChain(id, id', id'') ==>
         (forall x in qcStore[r]. blocks[x].round > blocks[id''].round ==> Reaches(x, id))
 
-forall r in HonestReplicaId. xid, xid', xid'', yid, yid', yid'' in qcStore[r].
+forall rx, ry in HonestReplicaId. forall xid, xid', xid'' in qcStore[rx]. forall yid, yid', yid'' in qcStore[ry].
     ContiguousTwoChain(xid, xid', xid'') && ContiguousTwoChain(yid, yid', yid'') ==> Consistent(xid, yid)
