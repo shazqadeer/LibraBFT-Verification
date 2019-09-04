@@ -31,15 +31,15 @@ function Consistent(id': BlockId, id: BlockId) : bool {
 var voteStore: [BlockId]Set<HonestReplicaId>
 
 // id of the latest globally-committed block
-var committed: BlockId
+var globallyCommitted: BlockId
 
 //// per-replica variables
 
 // monotonically increasing round of the last voted block
 var lastVoteRound: uint
 
-// monotonically increasing round of the locked block
-var lockedBlockRound: uint
+// monotonically increasing round of the preferred block
+var preferredBlockRound: uint
 
 //// procedures
 
@@ -56,9 +56,9 @@ reads voteStore
 procedure Initialize()
 {
     voteStore := (lambda id: BlockId. if id = root then HonestReplicaId else {})
-    committed := root
+    globallyCommitted := root
     lastVoteRound := (lambda r: HonestReplicaId. 0)
-    lockedBlockRound := (lambda r: HonestReplicaId. 0)
+    preferredBlockRound := (lambda r: HonestReplicaId. 0)
 }
 
 //// start things off
@@ -79,10 +79,10 @@ procedure Main() {
     }
 }
 
-//// event handler at a replica to "send" vote and update lastVoteRound and lockedBlockRound
+//// event handler at a replica to process proposal
 procedure OnReceiveProposal(r: HonestReplicaId, newBlockId: BlockId)
-reads  voteStore, lastVoteRound, lockedBlockRound
-writes voteStore, lastVoteRound, lockedBlockRound
+reads  voteStore, lastVoteRound, preferredBlockRound
+writes voteStore, lastVoteRound, preferredBlockRound
 {
     var newBlock, b'', b': Block
     var id'': BlockId
@@ -93,24 +93,24 @@ writes voteStore, lastVoteRound, lockedBlockRound
         return
     }
     
-    // possibly update locked block
+    // possibly update preferred block
     b'  := blocks[b''.parent]
-    if b'.round > lockedBlockRound[r] {
-        lockedBlockRound[r] := b'.round
+    if b'.round > preferredBlockRound[r] {
+        preferredBlockRound[r] := b'.round
     }
     
     // possibly vote
     b'' := blocks[id'']
-    if newBlock.round > lastVoteRound[r] && b''.round >= lockedBlockRound[r] {
+    if newBlock.round > lastVoteRound[r] && b''.round >= preferredBlockRound[r] {
         lastVoteRound[r] := newBlock.round
         voteStore[newBlockId] := voteStore[newBlockId] + r
     }
 }
 
-//// event handler at a replica to update committed and assert consensus safety
+//// event handler at a replica to commit a block
 procedure TryCommit(r: HonestReplicaId, id'': BlockId)
-reads  voteStore, committed
-writes committed
+reads  voteStore, globallyCommitted
+writes globallyCommitted
 {
     var id', id: BlockId
     var b'', b', b: Block
@@ -123,11 +123,11 @@ writes committed
     b'  := blocks[id']
     id  := b'.parent
     b := blocks[id]
-    // Invariant: (exists q: HonestQuorum. (forall x: HonestReplicaId. x in q ==> lockedBlockRound[x] >= b.round))
+    // Invariant: (exists q: HonestQuorum. (forall x: HonestReplicaId. x in q ==> preferredBlockRound[x] >= b.round))
     if b''.round == b'.round + 1 && b'.round == b.round + 1 {
-        assert Consistent(id, committed)
-        if Reaches(id, committed) {
-            committed := id
+        assert Consistent(id, globallyCommitted)
+        if Reaches(id, globallyCommitted) {
+            globallyCommitted := id
         }
     }
 }

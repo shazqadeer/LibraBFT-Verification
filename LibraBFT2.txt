@@ -41,8 +41,8 @@ var qcStore: Set<BlockId>
 // monotonically increasing round of the last voted block
 var lastVoteRound: uint
 
-// monotonically increasing round of the locked block
-var lockedBlockRound: uint
+// monotonically increasing round of the preferred block
+var preferredBlockRound: uint
 
 //// procedures
 
@@ -52,7 +52,7 @@ procedure Initialize()
     globallyCommitted := root
     qcStore := (lambda r: HonestQuorum. { root })
     lastVoteRound := (lambda r: HonestReplicaId. 0)
-    lockedBlockRound := (lambda r: HonestReplicaId. 0)
+    preferredBlockRound := (lambda r: HonestReplicaId. 0)
 }
 
 //// start things off
@@ -77,62 +77,63 @@ procedure Main() {
     }
 }
 
-//// event handler at a replica to "send" vote and update lastVoteRound
-procedure OnProposal(r: HonestReplicaId, newBlockId: BlockId)
-reads  qcStore, voteStore, lastVoteRound
-writes voteStore, lastVoteRound
-{
-    var newBlock, b'': Block
-    var id'': BlockId
-
-    newBlock := blocks[newBlockId]
-    id'' := newBlock.parent
-    if !(id'' in qcStore[r]) {
-        return
-    }
-    
-    // possibly vote
-    b'' := blocks[id'']
-    if newBlock.round > lastVoteRound[r] && b''.round >= lockedBlockRound[r] {
-        lastVoteRound[r] := newBlock.round
-        voteStore[newBlockId] := voteStore[newBlockId] + r
-    }
-}
-
+//// helper procedure to add quorum certificate
 procedure TryAddQuorumCertificate(blockId: BlockId) : bool 
-reads  qcStore, voteStore
-writes qcStore
+reads  qcStore, voteStore, preferredBlockRound
+writes qcStore, preferredBlockRound
 {
     var numEquivocators: uint
+    var b'', b': Block
 
     // numEquivocators is the number of faulty replicas who voted for blockId
     assume numEquivocators <= f
     if size(voteStore[blockId]) + numEquivocators >= h {
         qcStore[r] := qcStore[r] + blockId
     }
+
+    // possibly update preferred block
+    if blockId in qcStore[r] {
+        b'' := blocks[blockId]
+        b'  := blocks[b''.parent]
+        if b'.round > preferredBlockRound[r] {
+            preferredBlockRound[r] := b'.round
+        }
+    }
+
     blockId in qcStore[r]
 }
 
-//// event handler at a replica to add a quorum certificate and update lockedBlockRound
-procedure OnQuorumCertificate(r: HonestReplicaId, id'': BlockId)
-reads  qcStore, voteStore, lockedBlockRound
-writes qcStore, lockedBlockRound
+//// event handler at a replica to process a proposal
+procedure OnProposal(r: HonestReplicaId, newBlockId: BlockId)
+reads  qcStore, voteStore, lastVoteRound, preferredBlockRound
+writes qcStore, voteStore, lastVoteRound
 {
-    var b'', b': Block
+    var newBlock, b'': Block
+    var id'': BlockId
 
+    newBlock := blocks[newBlockId]
+    id'' := newBlock.parent
     if !TryAddQuorumCertificate(id'') {
         return
     }
-
-    // possibly update locked block
+    
+    // possibly vote
     b'' := blocks[id'']
-    b'  := blocks[b''.parent]
-    if b'.round > lockedBlockRound[r] {
-        lockedBlockRound[r] := b'.round
+    if newBlock.round > lastVoteRound[r] && b''.round >= preferredBlockRound[r] {
+        lastVoteRound[r] := newBlock.round
+        voteStore[newBlockId] := voteStore[newBlockId] + r
     }
 }
 
-//// event handler at a replica to commit a block and assert consensus safety
+//// event handler at a replica to add a quorum certificate
+procedure OnQuorumCertificate(r: HonestReplicaId, blockId: BlockId)
+reads  qcStore, voteStore, preferredBlockRound
+writes qcStore, preferredBlockRound
+{
+    TryAddQuorumCertificate(blockId)
+}
+
+//// event handler at a replica to commit a block
 procedure OnCommit(r: HonestReplicaId, id'': BlockId)
 reads  qcStore, globallyCommitted
 writes globallyCommitted
@@ -183,7 +184,7 @@ forall r in HonestReplicaId. id, id' in qcStore[r].
 
 forall r in HonestReplicaId. id, id', id'' in qcStore[r].
     TwoChain(id, id', id'') ==>
-        (exists q: HonestQuorum. (forall x: HonestReplicaId. x in q ==> lockedBlockRound[x] >= blocks[id].round))
+        (exists q: HonestQuorum. (forall x: HonestReplicaId. x in q ==> preferredBlockRound[x] >= blocks[id].round))
 
 forall r in HonestReplicaId. id, id', id'' in qcStore[r].
     ContiguousTwoChain(id, id', id'') ==>
