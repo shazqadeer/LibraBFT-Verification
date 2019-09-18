@@ -175,6 +175,11 @@ function OneChain(id: BlockId, id': BlockId): bool
     id = blocks[id'].parent
 }
 
+function ContiguousOneChain(id: BlockId, id': BlockId): bool
+{
+    id = blocks[id'].parent && blocks[id].round + 1 == blocks[id'].round
+}
+
 function TwoChain(id: BlockId, id': BlockId, id'': BlockId) : bool 
 {
     OneChain(id, id') && OneChain(id', id'')
@@ -182,9 +187,7 @@ function TwoChain(id: BlockId, id': BlockId, id'': BlockId) : bool
 
 function ContiguousTwoChain(id: BlockId, id': BlockId, id'': BlockId) : bool 
 {
-    TwoChain(id, id', id'') && 
-    blocks[id].round + 1 == blocks[id'].round &&
-    blocks[id'].round + 1 == blocks[id''].round
+    ContiguousOneChain(id, id') && ContiguousOneChain(id', id'')
 }
 
 forall r in HonestReplicaId. forall id, id' in qcStore[r]. 
