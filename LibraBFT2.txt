@@ -106,26 +106,34 @@ writes qcStore, preferredBlockRound
     blockId in qcStore[r]
 }
 
-//// event handler at a replica to process a proposal
-procedure OnProposal(r: HonestReplicaId, newBlockId: BlockId)
-reads  qcStore, voteStore, lastVoteRound, preferredBlockRound
-writes qcStore, voteStore, lastVoteRound
+//// possibly vote
+procedure TryVote(r: HonestReplicaId, newBlockId: BlockId) 
+reads voteStore, lastVoteRound, preferredBlockRound
+writes voteStore, lastVoteRound
 {
     var newBlock, b'': Block
-    var id'': BlockId
 
     newBlock := blocks[newBlockId]
-    id'' := newBlock.parent
-    if !TryAddQuorumCertificate(id'') {
-        return
-    }
-    
-    // possibly vote
-    b'' := blocks[id'']
+    b'' := blocks[newBlock.parent]
     if newBlock.round > lastVoteRound[r] && b''.round >= preferredBlockRound[r] {
         lastVoteRound[r] := newBlock.round
         voteStore[newBlockId] := voteStore[newBlockId] + r
     }
+}
+
+//// event handler at a replica to process a proposal
+procedure OnProposal(r: HonestReplicaId, newBlockId: BlockId)
+reads  qcStore, preferredBlockRound
+writes qcStore, preferredBlockRound
+{
+    var newBlock: Block
+
+    newBlock := blocks[newBlockId]
+    if !TryAddQuorumCertificate(newBlock.parent) {
+        return
+    }
+    
+    async TryVote(r, newBlockId)
 }
 
 //// event handler at a replica to add a quorum certificate

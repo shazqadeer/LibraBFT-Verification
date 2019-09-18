@@ -93,6 +93,8 @@ writes voteStore, lastVoteRound, preferredBlockRound
         return
     }
     
+    b'' := blocks[id'']
+    
     // possibly update preferred block
     b'  := blocks[b''.parent]
     if b'.round > preferredBlockRound[r] {
@@ -100,7 +102,6 @@ writes voteStore, lastVoteRound, preferredBlockRound
     }
     
     // possibly vote
-    b'' := blocks[id'']
     if newBlock.round > lastVoteRound[r] && b''.round >= preferredBlockRound[r] {
         lastVoteRound[r] := newBlock.round
         voteStore[newBlockId] := voteStore[newBlockId] + r
