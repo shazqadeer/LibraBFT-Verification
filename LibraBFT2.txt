@@ -78,7 +78,7 @@ procedure Main() {
 }
 
 //// helper procedure to add quorum certificate
-procedure TryAddQuorumCertificate(blockId: BlockId) : bool 
+procedure TryAddQuorumCertificate(r: HonestReplicaId, blockId: BlockId) : bool 
 reads  qcStore, voteStore, preferredBlockRound
 writes qcStore, preferredBlockRound
 {
@@ -129,7 +129,7 @@ writes qcStore, preferredBlockRound
     var newBlock: Block
 
     newBlock := blocks[newBlockId]
-    if !TryAddQuorumCertificate(newBlock.parent) {
+    if !TryAddQuorumCertificate(r, newBlock.parent) {
         return
     }
     
@@ -141,7 +141,7 @@ procedure OnQuorumCertificate(r: HonestReplicaId, blockId: BlockId)
 reads  qcStore, voteStore, preferredBlockRound
 writes qcStore, preferredBlockRound
 {
-    TryAddQuorumCertificate(blockId)
+    TryAddQuorumCertificate(r, blockId)
 }
 
 //// event handler at a replica to commit a block
